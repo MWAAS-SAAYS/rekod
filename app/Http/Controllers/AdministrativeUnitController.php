@@ -1,122 +1,134 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\AdministrativeUnit;
 use App\Imports\AdministrativeUnitsImport;
+use App\Models\AdministrativeUnit;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
 use Yajra\DataTables\Facades\DataTables;
 
-class AdministrativeUnitController extends Controller
+final class AdministrativeUnitController extends Controller
 {
-    public function index(Request $request)
+    /**
+     * Map of numeric levels to unit level labels.
+     */
+    private const LEVEL_MAP = [
+        1 => 'School',
+        2 => 'Department',
+        3 => 'Course',
+    ];
+
+    /**
+     * Display administrative units list or handle DataTables server-side processing.
+     */
+    public function index(Request $request): View|JsonResponse
     {
+        Gate::authorize('manage-administrative-units');
+
         if ($request->ajax()) {
-            $data = AdministrativeUnit::orderBy('level', 'asc')
-                            -> orderBy('name', 'asc');
+            $data = AdministrativeUnit::with('parent:id,code,name')
+                ->orderBy('level', 'asc')
+                ->orderBy('name', 'asc');
 
             return DataTables::of($data)
                 ->addIndexColumn()
-                ->addColumn('parent_name', function ($row) {
-                    return $row->parent->name ?? '—-';
-                })
-                ->addColumn('level_name', function ($row) {
-                    $names = [
-                        1 =>'School',
-                        2=> 'Department',
-                        3 => 'course',
-                    ];
-
-                    return $names[$row->level] ?? 'Unknown';
-                })
-
+                ->addColumn('parent_name', fn ($row) => $row->parent?->name ?? '—')
+                ->addColumn('level_name', fn ($row) => self::LEVEL_MAP[$row->level] ?? 'Unknown')
                 ->filterColumn('level_name', function ($query, $keyword) {
-                    $map = [
-                        1 =>'School',
-                        2=> 'Department',
-                        3 => 'course',
-                    ];
+                    $search = strtolower(trim($keyword));
+                    $flippedMap = array_change_key_case(array_flip(self::LEVEL_MAP), CASE_LOWER);
 
-                    $keyword = strtolower($keyword);
-
-                    
-                    if (isset($map[$keyword])) {
-                        $query->where('level', $map[$keyword]);
-                    } else {
-                        
-                        if (is_numeric($keyword)) {
-                            $query->where('level', intval($keyword));
-                        }
+                    if (isset($flippedMap[$search])) {
+                        $query->where('level', $flippedMap[$search]);
+                    } elseif (is_numeric($search)) {
+                        $query->where('level', (int) $search);
                     }
                 })
-
                 ->addColumn('action', function ($row) {
-                    return '<button class="text-blue-600 hover:underline">View</button>';
+                    return '<button class="text-blue-600 hover:underline view-unit" data-id="' . (int) $row->id . '">View</button>';
                 })
                 ->rawColumns(['action'])
                 ->make(true);
         }
-        $admin_units=AdministrativeUnit::orderBy('name')->get();
 
+        $admin_units = AdministrativeUnit::orderBy('name')->get();
 
-        return view('admin.administrative-units',compact('admin_units'));
+        return view('admin.administrative-units', compact('admin_units'));
     }
 
-   
-    public function upload(Request $request)
+    /**
+     * Upload and import administrative units from a spreadsheet.
+     */
+    public function upload(Request $request): JsonResponse
     {
+        Gate::authorize('manage-administrative-units');
+
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv|max:2048',
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:2048'],
         ]);
 
         try {
-            $import = new AdministrativeUnitsImport;
+            $import = new AdministrativeUnitsImport();
             Excel::import($import, $request->file('file'));
-            if ($import->failures()->isNotEmpty()) {
+
+            if (method_exists($import, 'failures') && $import->failures()->isNotEmpty()) {
                 return response()->json([
-                    'errors_import' => $import->failures()
-                ]);
+                    'status' => 'error',
+                    'errors_import' => $import->failures(),
+                ], 422);
             }
+
             return response()->json([
                 'status' => 'success',
                 'message' => 'Administrative units uploaded successfully!',
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            Log::error('Administrative units upload failed: ' . $e->getMessage());
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error uploading file: ' . $e->getMessage(),
+                'message' => 'Error uploading file. Please verify spreadsheet formatting.',
             ], 500);
         }
     }
-    public function add(Request $request)
-{
-    $request->validate([
-        'name' => 'required|string|max:255',
-        'code' => 'required|string|max:50|unique:administrative_units,code',
-       'parent_code' => [
-            'string',
-            'exists:administrative_units,code',
-            'nullable',
-            'required_if:level,!=,1'
-        ],
-        'level' => 'required|integer|min:1',
-    ]);
 
-    AdministrativeUnit::create([
-        'name' => $request->name,
-        'code' => $request->code,
-        'parent_code' => $request->parent_code,
-        'level' => $request->level,
-    ]);
-  
+    /**
+     * Add a single administrative unit record manually.
+     */
+    public function add(Request $request): JsonResponse
+    {
+        Gate::authorize('manage-administrative-units');
 
-    return response()->json([
-        'status' => 'success',
-        'message' => 'Administrative unit added successfully.',
-    ]);
-}
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'string', 'max:50', 'unique:administrative_units,code'],
+            'parent_code' => [
+                'nullable',
+                'string',
+                'exists:administrative_units,code',
+                'required_if:level,2,3',
+            ],
+            'level' => ['required', 'integer', 'min:1', 'max:3'],
+        ]);
 
+        $unit = AdministrativeUnit::create([
+            'name' => trim($validated['name']),
+            'code' => strtoupper(trim($validated['code'])),
+            'parent_code' => !empty($validated['parent_code']) ? strtoupper(trim($validated['parent_code'])) : null,
+            'level' => (int) $validated['level'],
+        ]);
 
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Administrative unit added successfully.',
+            'data' => $unit,
+        ], 201);
+    }
 }

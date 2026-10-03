@@ -1,105 +1,137 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Imports;
+
 use App\Models\AdministrativeUnit;
 use App\Models\Attachment;
 use App\Models\AttachmentLecturer;
 use App\Models\Lecturer;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Illuminate\Support\Str;
+use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\SkipsFailures;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
-use Maatwebsite\Excel\Concerns\Importable;
+use Throwable;
 
-class AttachmentLecturersImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
-
+final class AttachmentLecturersImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
 {
-use Importable, SkipsFailures;
+    use Importable;
+    use SkipsFailures;
 
-    public $successCount = 0;
-    public $failedRecords = [];
+    public int $successCount = 0;
 
+    /** @var array<int, array{row: array<string, mixed>, reason: string}> */
+    public array $failedRecords = [];
+
+    /**
+     * Get the validation rules that apply to the import row.
+     *
+     * @return array<string, array<int, string>>
+     */
     public function rules(): array
     {
         return [
-            '*.staff_number'            => ['required'],
-             '*.job_grade'         => ['required'],
-            '*.attachment_slug'   => ['required'],
-            '*.department_code'   => ['nullable'],
+            'staff_number'    => ['required', 'string'],
+            'job_grade'       => ['required', 'string', 'max:50'],
+            'attachment_slug' => ['required', 'string'],
+            'department_code' => ['nullable', 'string'],
         ];
     }
 
-
-
-    public function model(array $row)
+    /**
+     * Map an Excel row to an AttachmentLecturer model instance.
+     *
+     * @param array<string, mixed> $row
+     */
+    public function model(array $row): ?AttachmentLecturer
     {
         try {
-            $staff_no  = strtoupper(trim($row['staff_number'] ?? ''));
-              $jobGrade = trim($row['job_grade'] ?? '');
-            $slug = strtolower(trim($row['attachment_slug'] ?? ''));
-            $department_code = strtolower(trim($row['department_code'] ?? ''));
-            $lecturer = Lecturer::where('staff_number', $staff_no)->first();
-            $attachment = Attachment::where('slug', $slug)->first();
+            $staffNo = Str::upper(trim((string) ($row['staff_number'] ?? '')));
+            $jobGrade = trim((string) ($row['job_grade'] ?? ''));
+            $slug = Str::lower(trim((string) ($row['attachment_slug'] ?? '')));
+            $departmentCode = Str::lower(trim((string) ($row['department_code'] ?? '')));
 
+            $lecturer = Lecturer::query()
+                ->select(['id', 'department_id', 'job_grade', 'staff_number'])
+                ->where('staff_number', $staffNo)
+                ->first();
+
+            $attachment = Attachment::query()
+                ->select(['id', 'slug'])
+                ->where('slug', $slug)
+                ->first();
+
+            $department = null;
             $errors = [];
 
-            if (!$lecturer) {
-                $errors[] = "Lecturer with staff_no '{$row['staff_number']}' not found";
+            if (! $lecturer) {
+                $errors[] = "Lecturer with staff_no '{$staffNo}' not found";
             }
 
-            if (!$attachment) {
-                $errors[] = "Attachment with slug '{$row['attachment_slug']}' not found";
+            if (! $attachment) {
+                $errors[] = "Attachment with slug '{$slug}' not found";
             }
-            if ($department_code) {
-                $department = AdministrativeUnit::where('code', $department_code)
-                                        ->where('level',2)
-                                      ->first();
-                if (!$department) {
-                    $errors[] = "Department with code '{$row['department_code']}' not found";
+
+            if ($departmentCode !== '') {
+                $department = AdministrativeUnit::query()
+                    ->select(['id', 'code', 'level'])
+                    ->where('code', $departmentCode)
+                    ->where('level', 2)
+                    ->first();
+
+                if (! $department) {
+                    $errors[] = "Department with code '{$departmentCode}' not found";
                 }
             }
 
-            if($lecturer && $attachment) {
-                $attachment_lecturer = AttachmentLecturer::where('lecturer_id', $lecturer->id)
-                                                        ->where('attachment_id', $attachment->id)
-                                                         ->where('department_id', $department->id ?? $lecturer->department_id)
-                                                        ->first();
-                if ($attachment_lecturer) {
-                    $errors[] = "Lecturer with staff_no '{$row['staff_number']}' for attachment '{$row['attachment_slug']}' had already been uploaded";
+            $departmentId = $department->id ?? $lecturer?->department_id;
+
+            if ($lecturer && $attachment && $departmentId) {
+                $exists = AttachmentLecturer::query()
+                    ->where('lecturer_id', $lecturer->id)
+                    ->where('attachment_id', $attachment->id)
+                    ->where('department_id', $departmentId)
+                    ->exists();
+
+                if ($exists) {
+                    $errors[] = "Lecturer with staff_no '{$staffNo}' for attachment '{$slug}' had already been uploaded";
                 }
             }
 
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 $this->failedRecords[] = [
-                    'row' => $row,
-                    'reason' => implode(" | ", $errors)
+                    'row'    => $row,
+                    'reason' => implode(' | ', $errors),
                 ];
+
                 return null;
             }
-         
-        if ($jobGrade) {
-            $lecturer->update(['job_grade' => $jobGrade]);
-        }
 
+            if ($jobGrade !== '' && $lecturer->job_grade !== $jobGrade) {
+                $lecturer->update(['job_grade' => $jobGrade]);
+            }
 
-
-            AttachmentLecturer::create([
-                'lecturer_id' => $lecturer->id,
+            $attachmentLecturer = AttachmentLecturer::create([
+                'lecturer_id'   => $lecturer->id,
                 'attachment_id' => $attachment->id,
-                'department_id' => $department->id ?? $lecturer->department_id,
-                'job_grade'     => $lecturer->job_grade,
+                'department_id' => $departmentId,
+                'job_grade'     => $jobGrade ?: $lecturer->job_grade,
             ]);
 
             $this->successCount++;
-        } catch (\Exception $e) {
+
+            return $attachmentLecturer;
+        } catch (Throwable $e) {
             $this->failedRecords[] = [
-                'row' => $row,
-                'reason' => $e->getMessage()
+                'row'    => $row,
+                'reason' => $e->getMessage(),
             ];
+
             return null;
         }
-
-
     }
-
 }

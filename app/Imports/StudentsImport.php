@@ -1,83 +1,121 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Imports;
 
 use App\Models\AdministrativeUnit;
-use App\Models\User;
 use App\Models\Student;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\SkipsFailures;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
-use Maatwebsite\Excel\Concerns\Importable;
-use Illuminate\Support\Facades\Validator;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\WithValidation;
+use Throwable;
 
-class StudentsImport implements ToModel, WithHeadingRow, SkipsOnFailure
+final class StudentsImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
 {
-use Importable, SkipsFailures;
-public $successCount = 0;
-public $failedRecords = [];
-public function model(array $row)
-{
-// Validate the row
-    try{
-$validator = Validator::make($row, [
-    'name' => 'required|string',
-    'email' => 'required|email|unique:users,email',
-    'phone_number' => 'nullable|string',
-    'reg_no' => 'required|string',
-    'year_of_study' => 'nullable|string',
-    'program_code' => [
-        'required',
-        Rule::exists('administrative_units', 'code')->where('level', 3),
-    ],
-]);
+    use Importable;
+    use SkipsFailures;
 
-    if ($validator->fails()) {
-        $this->failedRecords[] = [
-            'reason' => implode(" | ", $validator->errors()->all())
+    public int $successCount = 0;
+
+    /** @var array<int, array{row?: array<string, mixed>, reason: string}> */
+    public array $failedRecords = [];
+
+    /**
+     * Get the validation rules that apply to the import row.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function rules(): array
+    {
+        return [
+            'name'          => ['required', 'string', 'max:255'],
+            'email'         => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'phone_number'  => ['nullable', 'string', 'max:50'],
+            'reg_no'        => ['required', 'string', 'max:100', 'unique:students,reg_no'],
+            'year_of_study' => ['nullable', 'string', 'max:20'],
+            'program_code'  => ['required', 'string', 'max:100'],
         ];
-
-        return null;
     }
 
-    return DB::transaction(function () use ($row) {
-        $reg_no = Str::upper($row['reg_no']);
-        $email= Str::lower($row['email']);
-        $programme_code= Str::lower($row['program_code']);
-        $programme = AdministrativeUnit::where('level', 3)->where('code', $programme_code)->first();
-            if(!$programme){
+    /**
+     * Map an Excel row to a User model instance.
+     *
+     * @param array<string, mixed> $row
+     */
+    public function model(array $row): ?User
+    {
+        try {
+            $regNo = Str::upper(trim((string) ($row['reg_no'] ?? '')));
+            $email = Str::lower(trim((string) ($row['email'] ?? '')));
+            $programCode = Str::lower(trim((string) ($row['program_code'] ?? '')));
+            $name = trim((string) ($row['name'] ?? ''));
+
+            $phoneNumber = isset($row['phone_number']) && trim((string) $row['phone_number']) !== ''
+                ? trim((string) $row['phone_number'])
+                : null;
+
+            $yearOfStudy = isset($row['year_of_study']) && trim((string) $row['year_of_study']) !== ''
+                ? trim((string) $row['year_of_study'])
+                : null;
+
+            $programme = AdministrativeUnit::query()
+                ->select(['id', 'code', 'level'])
+                ->where('code', $programCode)
+                ->where('level', 3)
+                ->first();
+
+            if (! $programme) {
                 $this->failedRecords[] = [
-                    'reason' => 'Programme Not Found'
+                    'row'    => $row,
+                    'reason' => "Programme with code '{$programCode}' not found (level 3)",
                 ];
+
                 return null;
             }
-        $user = User::create([
-                    'email' => $email,
-                    'name' => $row['name'],
-                    'phone_number' => $row['phone_number'],
-                    'password' =>bcrypt($reg_no),
-                    'role' => 'student',
-                    ]);
 
-            Student::create([
-                'user_id' => $user->id,
-                'reg_no' => $reg_no,
-                'program_id' => $programme->id,
-                'year_of_study' => $row['year_of_study'],
-                'phone_number' => $row['phone_number'],
-                ]
-                );
+            return DB::transaction(function () use (
+                $regNo,
+                $email,
+                $name,
+                $phoneNumber,
+                $yearOfStudy,
+                $programme
+            ) {
+                $user = User::create([
+                    'name'         => $name,
+                    'email'        => $email,
+                    'phone_number' => $phoneNumber,
+                    'password'     => Hash::make($regNo),
+                    'role'         => 'student',
+                ]);
 
-            $this->successCount++;
-    return $user;
-    });
-}
-catch(\Exception $e){
-    $this->failedRecords[] = $e->getMessage();}
-}
+                Student::create([
+                    'user_id'       => $user->id,
+                    'reg_no'        => $regNo,
+                    'program_id'    => $programme->id,
+                    'year_of_study' => $yearOfStudy,
+                    'phone_number'  => $phoneNumber,
+                ]);
 
+                $this->successCount++;
+
+                return $user;
+            });
+        } catch (Throwable $e) {
+            $this->failedRecords[] = [
+                'row'    => $row,
+                'reason' => $e->getMessage(),
+            ];
+
+            return null;
+        }
+    }
 }

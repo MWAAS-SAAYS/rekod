@@ -1,36 +1,55 @@
-
-<div id="student_attachment_details-modal" tabindex="-1" aria-hidden="true"  data-modal-backdrop="static" class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full">
-    <div class="relative p-4 w-4/5 max-h-full">
+<div id="student_attachment_details-modal" 
+     tabindex="-1" 
+     aria-hidden="true" 
+     data-modal-backdrop="static" 
+     class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 justify-center items-center w-full md:inset-0 h-[calc(100%-1rem)] max-h-full bg-slate-900/60 backdrop-blur-xs">
+    
+    <div class="relative p-4 w-full max-w-4xl max-h-full">
         
-        <!-- Modal content -->
-        <div class="relative bg-white rounded-lg shadow-sm ">
-            <!-- Modal header -->
-            <div class="flex items-center justify-between p-4 md:p-5 border-b rounded-t ">
-                <h3 class="text-lg font-semibold text-gray-">
-                   Student Attachment Details
-                </h3>
-                <button type="button" class="text-gray-400 bg-transparent hover:bg-gray-200 hover:text-gray-900 rounded-lg text-sm w-8 h-8 ms-auto inline-flex justify-center items-center close-student_attachment_details_modal-btn">
-                    <svg class="w-3 h-3" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 14">
-                        <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m1 1 6 6m0 0 6 6M7 7l6-6M7 7l-6 6"/>
-                    </svg>
+        <!-- Modal content card -->
+        <div class="relative bg-white rounded-2xl shadow-2xl border border-slate-200/80 overflow-hidden">
+            
+            <!-- Modal header banner -->
+            <div class="bg-[#0b1329] px-6 py-4 border-b border-amber-500/20 flex items-center justify-between relative overflow-hidden">
+                <div class="absolute -right-10 -bottom-10 w-40 h-40 bg-amber-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                
+                <div class="relative z-10 flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-xs font-bold border border-amber-500/20">
+                        <i class="fas fa-id-card"></i>
+                    </div>
+                    <h3 class="text-sm font-bold text-white tracking-wide">
+                        Student Attachment Details
+                    </h3>
+                </div>
+
+                <button type="button" class="relative z-10 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-xl text-xs w-8 h-8 inline-flex justify-center items-center transition-all close-student_attachment_details_modal-btn">
+                    <i class="fas fa-xmark text-sm"></i>
                     <span class="sr-only">Close modal</span>
                 </button>
             </div>
 
-            <table class="min-w-full border border-gray-300" id="student_attachment_detailsTable">
-                <tbody>
-                <!-- jQuery will fill here -->
-                </tbody>
-            </table>
-            <button  type="button" class="text-white inline-flex items-center bg-gray-300 hover:bg-gray-700 focus:ring-4 focus:outline-none focus:ring-gray-100 font-medium rounded-lg text-sm px-5 py-2.5 text-center close-student_attachment_details_modal-btn ">
-                <svg class="me-1 -ms-1 w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd"></path></svg>
-                close
-            </button>
+            <!-- Modal Body (Details Table Container) -->
+            <div class="p-6 overflow-x-auto">
+                <table class="w-full text-left border-collapse rounded-xl overflow-hidden border border-slate-200/80" id="student_attachment_detailsTable">
+                    <tbody class="divide-y divide-slate-100 text-xs">
+                        <!-- jQuery populates data here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end">
+                <button type="button" class="inline-flex items-center px-4 py-2 rounded-xl bg-slate-900 text-amber-400 hover:bg-slate-800 text-xs font-bold transition-all shadow-xs close-student_attachment_details_modal-btn">
+                    <i class="fas fa-xmark mr-2 text-[10px]"></i> Close Details
+                </button>
+            </div>
+
         </div>
     </div>
 </div>
+
 @push('scripts')
-   <script>
+<script>
     $(document).ready(function() {
         const student_attachment_details_modal = new Modal($('#student_attachment_details-modal')[0], {
             backdrop: 'static',
@@ -43,142 +62,157 @@
 
         $(document).on('click', '.open-student_attachment_details_modal-btn', function () {
             const student_attachment_details_id = $(this).data('id');
-            openAttachmentModal(student_attachment_details_id)
+            openAttachmentModal(student_attachment_details_id);
         });
 
         function openAttachmentModal(id) {
             student_attachment_details_modal.show();
             
-            // Clear & show loading message
+            // Clear & show styled loading state
             $("#student_attachment_detailsTable tbody").html(`
-                <tr><td colspan="4" class="p-4 text-center">
-                    <div class="flex justify-center items-center">
-                        <svg class="animate-spin h-5 w-5 text-blue-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Loading...
-                    </div>
-                </td></tr>
+                <tr>
+                    <td colspan="4" class="p-8 text-center bg-slate-50/50">
+                        <div class="flex flex-col items-center justify-center space-y-2">
+                            <i class="fas fa-circle-notch animate-spin text-2xl text-amber-500"></i>
+                            <span class="text-xs font-bold text-slate-600">Retrieving Attachment Record...</span>
+                        </div>
+                    </td>
+                </tr>
             `);
 
-            // FIXED: Use hardcoded URL path
             $.ajax({
                 url: "/attachment-details/" + id,
                 method: 'GET',
                 success: function (data) {
-                    console.log('Data received:', data); // Debug
+                    console.log('Data received:', data);
                     fillAttachmentTable(data);
                 },
                 error: function (xhr, status, error) {
                     console.error('AJAX Error:', error);
-                    console.error('Status:', status);
-                    console.error('Response:', xhr.responseText);
                     
                     $("#student_attachment_detailsTable tbody").html(`
-                        <tr><td colspan="4" class="p-4 text-center text-red-600">
-                            Error loading data (${xhr.status})
-                            <br><small>${xhr.responseText}</small>
-                        </td></tr>
+                        <tr>
+                            <td colspan="4" class="p-6 text-center bg-rose-50/50 text-rose-600">
+                                <div class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-rose-100 text-rose-600 mb-2">
+                                    <i class="fas fa-triangle-exclamation"></i>
+                                </div>
+                                <p class="text-xs font-bold">Failed to load attachment details (${xhr.status})</p>
+                                <p class="text-[11px] text-rose-500 mt-1">${xhr.responseText || 'An error occurred while fetching details.'}</p>
+                            </td>
+                        </tr>
                     `);
                 }
             });
         }
-function fillAttachmentTable(data) {
-    console.log('Data received:', data); // Debug to see structure
-    
-    let html = '';
 
-    // Student Info
-    html += `<tr>
-        <th class="p-3 bg-gray-100 w-1/4">Student Name</th>
-        <td class="p-3 w-1/4">${data?.student?.user?.name || 'N/A'}</td>
-        <th class="p-3 bg-gray-100 w-1/4">Student Phone No</th>
-        <td class="p-3 w-1/4">${data?.student?.user?.phone_number || 'N/A'}</td>
-    </tr>`;
-    
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Registration No</th>
-        <td class="p-3">${data?.student?.reg_no || 'N/A'}</td>
-        <th class="p-3 bg-gray-100">Email</th>
-        <td class="p-3">${data?.student?.user?.email || 'N/A'}</td>
-    </tr>`;
-    
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Course</th>
-        <td class="p-3" colspan="3">${data?.student?.program?.name || 'N/A'}</td>
-    </tr>`;
+        function fillAttachmentTable(data) {
+            console.log('Data received:', data);
+            
+            let html = '';
 
-    // Company Info
-    const townName = data?.company?.town?.name || data?.town?.name || 'Not Assigned';
-    
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Organization</th>
-        <td class="p-3">${data?.company?.name || 'N/A'}</td>
-        <th class="p-3 bg-gray-100">Street</th>
-        <td class="p-3">${data?.company?.street || 'N/A'}</td>
-    </tr>`;
-    
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Town</th>
-        <td class="p-3">${townName}</td>
-        <th class="p-3 bg-gray-100">Building</th>
-        <td class="p-3">${data?.company?.building || 'N/A'}</td>
-    </tr>`;
+            // Helper function for sleek section header banners
+            const sectionHeader = (title, icon) => `
+                <tr class="bg-[#0b1329] text-amber-400 font-bold uppercase tracking-wider text-[10px]">
+                    <td colspan="4" class="px-4 py-2 border-y border-amber-500/20">
+                        <span class="inline-flex items-center gap-1.5"><i class="${icon}"></i> ${title}</span>
+                    </td>
+                </tr>
+            `;
 
-    // Attachment Info
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Attachment Name</th>
-        <td class="p-3" colspan="3">${data?.attachment?.name || 'N/A'}</td>
-    </tr>`;
-    
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Start Date</th>
-        <td class="p-3">${data?.start_date || 'N/A'}</td>
-        <th class="p-3 bg-gray-100">End Date</th>
-        <td class="p-3">${data?.end_date || 'N/A'}</td>
-    </tr>`;
+            const thClass = "p-3 bg-slate-50/80 text-slate-500 text-[10px] font-bold uppercase tracking-wider border-b border-slate-100 w-1/4 align-middle";
+            const tdClass = "p-3 text-slate-800 font-semibold text-xs border-b border-slate-100 w-1/4 align-middle";
 
-    // Get values from data (handle both snake_case and camelCase)
-    const supervisor = data?.industrial_supervisor || data?.industrialSupervisor || {};
-    const supervisorUser = supervisor?.user || {};
-    
-    const attachmentLecturer = data?.attachment_lecturer || data?.attachmentLecturer || {};
-    const lecturer = attachmentLecturer?.lecturer || {};
-    const lecturerUser = lecturer?.user || {};
+            // SECTION 1: STUDENT INFO
+            html += sectionHeader('Student Information', 'fas fa-user-graduate');
+            html += `<tr>
+                <th class="${thClass}">Student Name</th>
+                <td class="${tdClass}">${data?.student?.user?.name || 'N/A'}</td>
+                <th class="${thClass}">Phone Number</th>
+                <td class="${tdClass}">${data?.student?.user?.phone_number || 'N/A'}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Registration No</th>
+                <td class="${tdClass}">${data?.student?.reg_no || 'N/A'}</td>
+                <th class="${thClass}">Email Address</th>
+                <td class="${tdClass}">${data?.student?.user?.email || 'N/A'}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Academic Program</th>
+                <td class="${tdClass}" colspan="3">${data?.student?.program?.name || 'N/A'}</td>
+            </tr>`;
 
-    // Supervisor Info
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Industrial Supervisor</th>
-        <td class="p-3">${supervisorUser?.name || 'N/A'}</td>
-        <th class="p-3 bg-gray-100">Supervisor Email</th>
-        <td class="p-3">${supervisorUser?.email || 'N/A'}</td>
-    </tr>`;
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Supervisor Phone</th>
-        <td class="p-3" colspan="3">${supervisorUser?.phone_number || 'N/A'}</td>
-    </tr>`;
+            // SECTION 2: COMPANY INFO
+            const townName = data?.company?.town?.name || data?.town?.name || 'Not Assigned';
+            html += sectionHeader('Host Organization & Location', 'fas fa-building');
+            html += `<tr>
+                <th class="${thClass}">Organization</th>
+                <td class="${tdClass}">${data?.company?.name || 'N/A'}</td>
+                <th class="${thClass}">Street</th>
+                <td class="${tdClass}">${data?.company?.street || 'N/A'}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Town / Sub-County</th>
+                <td class="${tdClass}">${townName}</td>
+                <th class="${thClass}">Building / Office</th>
+                <td class="${tdClass}">${data?.company?.building || 'N/A'}</td>
+            </tr>`;
 
-    // Lecturer Info - Phone is in users.phone_number
-    const lecturerPhone = lecturerUser?.phone_number ||  // From users table
-                         lecturer?.office_phone ||       // From lecturers table (fallback)
-                         'N/A';
-    const lecturerName = lecturerUser?.name || 'Not Assigned';
-    const lecturerEmail = lecturerUser?.email || '';
+            // SECTION 3: ATTACHMENT DETAILS
+            html += sectionHeader('Placement Details', 'fas fa-calendar-check');
+            html += `<tr>
+                <th class="${thClass}">Attachment Name</th>
+                <td class="${tdClass}" colspan="3">${data?.attachment?.name || 'N/A'}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Start Date</th>
+                <td class="${tdClass}">${data?.start_date || 'N/A'}</td>
+                <th class="${thClass}">End Date</th>
+                <td class="${tdClass}">${data?.end_date || 'N/A'}</td>
+            </tr>`;
 
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Lecturer</th>
-        <td class="p-3">${lecturerName}</td>
-        <th class="p-3 bg-gray-100">Lecturer Email</th>
-        <td class="p-3">${lecturerEmail}</td>
-    </tr>`;
-    html += `<tr>
-        <th class="p-3 bg-gray-100">Lecturer Phone</th>
-        <td class="p-3" colspan="3">${lecturerPhone}</td>
-    </tr>`;
+            // SECTION 4: SUPERVISORS & LECTURER INFO
+            const supervisor = data?.industrial_supervisor || data?.industrialSupervisor || {};
+            const supervisorUser = supervisor?.user || {};
+            
+            const attachmentLecturer = data?.attachment_lecturer || data?.attachmentLecturer || {};
+            const lecturer = attachmentLecturer?.lecturer || {};
+            const lecturerUser = lecturer?.user || {};
 
-    $("#student_attachment_detailsTable tbody").html(html);
-}
+            const lecturerPhone = lecturerUser?.phone_number || lecturer?.office_phone || 'N/A';
+            const lecturerName = lecturerUser?.name || 'Not Assigned';
+            const lecturerEmail = lecturerUser?.email || 'N/A';
+
+            html += sectionHeader('Supervision & Assessment Team', 'fas fa-user-tie');
+            html += `<tr>
+                <th class="${thClass}">Industry Supervisor</th>
+                <td class="${tdClass}">${supervisorUser?.name || 'N/A'}</td>
+                <th class="${thClass}">Supervisor Email</th>
+                <td class="${tdClass}">${supervisorUser?.email || 'N/A'}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Supervisor Phone</th>
+                <td class="${tdClass}" colspan="3">${supervisorUser?.phone_number || 'N/A'}</td>
+            </tr>`;
+
+            html += `<tr>
+                <th class="${thClass}">Assigned Lecturer</th>
+                <td class="${tdClass}">${lecturerName}</td>
+                <th class="${thClass}">Lecturer Email</th>
+                <td class="${tdClass}">${lecturerEmail}</td>
+            </tr>`;
+            
+            html += `<tr>
+                <th class="${thClass}">Lecturer Phone</th>
+                <td class="${tdClass}" colspan="3">${lecturerPhone}</td>
+            </tr>`;
+
+            $("#student_attachment_detailsTable tbody").html(html);
+        }
     });
 </script>
 @endpush

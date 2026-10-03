@@ -1,97 +1,123 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Imports;
 
 use App\Models\AdministrativeUnit;
-use App\Models\User;
 use App\Models\Lecturer;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\SkipsFailures;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
-use Maatwebsite\Excel\Concerns\Importable;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\WithValidation;
+use Throwable;
 
-
-class LecturersImport implements ToModel, WithHeadingRow, SkipsOnFailure
+final class LecturersImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
 {
-    use Importable, SkipsFailures;
-    public $successCount = 0;
-    public $failedRecords = [];
-    public function model(array $row)
+    use Importable;
+    use SkipsFailures;
+
+    public int $successCount = 0;
+
+    /** @var array<int, array{row?: array<string, mixed>, reason: string}> */
+    public array $failedRecords = [];
+
+    /**
+     * Get the validation rules that apply to the import row.
+     *
+     * @return array<string, array<int, string>>
+     */
+    public function rules(): array
+    {
+        return [
+            'name'            => ['required', 'string', 'max:255'],
+            'email'           => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'phone_number'    => ['nullable', 'string', 'max:50', 'unique:users,phone_number'],
+            'staff_number'    => ['required', 'string', 'max:100'],
+            'job_grade'       => ['required', 'string', 'max:50'],
+            'department_code' => ['required', 'string', 'max:100'],
+            'office_location' => ['nullable', 'string', 'max:255'],
+        ];
+    }
+
+    /**
+     * Map an Excel row to a User model instance.
+     *
+     * @param array<string, mixed> $row
+     */
+    public function model(array $row): ?User
     {
         try {
-            // Validate the row
-            $validator = Validator::make($row, [
-                'name' => 'required|string',
-                'email' => 'required|email|unique:users,email',
-                'phone_number' => 'nullable|unique:users,phone_number',
-                'staff_number' => 'required',
-                'job_grade' => 'required',
-                'department_code' => [
-                    'required',
-                    Rule::exists('administrative_units', 'code')->where('level', 2),
-                ],
+            $staffNo = Str::upper(trim((string) ($row['staff_number'] ?? '')));
+            $email = Str::lower(trim((string) ($row['email'] ?? '')));
+            $departmentCode = Str::lower(trim((string) ($row['department_code'] ?? '')));
+            $name = trim((string) ($row['name'] ?? ''));
 
-                'office_location' => 'nullable|string',
-            ]);
+            $phoneNumber = isset($row['phone_number']) && trim((string) $row['phone_number']) !== ''
+                ? trim((string) $row['phone_number'])
+                : null;
 
-            if ($validator->fails()) {
+            $jobGrade = trim((string) ($row['job_grade'] ?? ''));
 
-                // Collect all validation error messages
+            $officeLocation = isset($row['office_location']) && trim((string) $row['office_location']) !== ''
+                ? trim((string) $row['office_location'])
+                : null;
+
+            $department = AdministrativeUnit::query()
+                ->select(['id', 'code', 'level'])
+                ->where('code', $departmentCode)
+                ->where('level', 2)
+                ->first();
+
+            if (! $department) {
                 $this->failedRecords[] = [
-                    'reason' => implode(" | ", $validator->errors()->all())
+                    'row'    => $row,
+                    'reason' => "Department with code '{$departmentCode}' not found (level 2)",
                 ];
 
                 return null;
             }
 
-            // DB transaction for safe saving
-            return DB::transaction(function () use ($row) {
+            return DB::transaction(function () use (
+                $staffNo,
+                $email,
+                $name,
+                $phoneNumber,
+                $jobGrade,
+                $officeLocation,
+                $department
+            ) {
+                $user = User::create([
+                    'name'         => $name,
+                    'email'        => $email,
+                    'phone_number' => $phoneNumber,
+                    'password'     => Hash::make($staffNo),
+                    'role'         => 'lecturer',
+                ]);
 
-                $staff_no = Str::upper(trim($row['staff_number']));
-                $email = Str::lower(trim($row['email']));
-                $department_code = Str::lower(trim($row['department_code']));
-
-                // Create or update the user
-                $user = User::Create([
-                        'email' => $email,
-                        'name' => $row['name'],
-                        'phone_number' => $row['phone_number'],
-                        'password' => bcrypt($staff_no),
-                        'role' => 'lecturer',
-                    ]);
-                $department = AdministrativeUnit::where('code', $department_code)
-                                ->where('level',2)
-                                ->first();
-                if(!$department){
-                    $this->failedRecords[] = [
-                        'reason' => 'Department Not Found'
-                    ];
-                    return null;
-                }
                 Lecturer::create([
-                        'user_id' => $user->id,
-                        'staff_number' => $staff_no,
-                        'job_grade' => trim($row['job_grade']), 
-                        'department_id' => $department->id ?? '',
-                        'office_location' => $row['office_location'] ?? null,
-                        'office_phone' => $row['phone_number'] ?? null,
-                    ]);
-
+                    'user_id'         => $user->id,
+                    'staff_number'    => $staffNo,
+                    'job_grade'       => $jobGrade,
+                    'department_id'   => $department->id,
+                    'office_location' => $officeLocation,
+                    'office_phone'    => $phoneNumber,
+                ]);
 
                 $this->successCount++;
 
                 return $user;
             });
-
-        } catch (\Exception $e) {
-
+        } catch (Throwable $e) {
             $this->failedRecords[] = [
-                'reason' => $e->getMessage()
+                'row'    => $row,
+                'reason' => $e->getMessage(),
             ];
 
             return null;

@@ -1,53 +1,63 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App;
 
 use Carbon\Carbon;
+use DateTimeInterface;
+use InvalidArgumentException;
 
-class GenerateWeekNumber
+final class GenerateWeekNumber
 {
-   
-    public function __construct()
+    /**
+     * Generate an ISO year-week ID string (e.g. "202638") from a date or timestamp.
+     *
+     * @param DateTimeInterface|string|null $date
+     */
+    public function weekId(DateTimeInterface|string|null $date = null): string
     {
-        
-    }
-
-    
-    public function weekId(string $date): string
-    {
-        $carbonDate = Carbon::parse($date);
+        if ($date === null) {
+            $carbonDate = Carbon::now();
+        } elseif ($date instanceof DateTimeInterface) {
+            $carbonDate = Carbon::instance($date);
+        } else {
+            $carbonDate = Carbon::parse($date);
+        }
 
         $isoYear = $carbonDate->isoWeekYear();
         $isoWeek = $carbonDate->isoWeek();
 
-
-        $weekId = $isoYear . str_pad($isoWeek, 2, '0', STR_PAD_LEFT);
-
-        return $weekId;
+        return $isoYear . str_pad((string) $isoWeek, 2, '0', STR_PAD_LEFT);
     }
 
-    
+    /**
+     * Resolve the Monday-to-Sunday date range from a 6-digit ISO week ID string (e.g. "202638").
+     *
+     * @return array{start: string, end: string}
+     *
+     * @throws InvalidArgumentException
+     */
     public function weekRangeFromId(string $weekId): array
     {
-        
-        $isoYear = substr($weekId, 0, 4);
+        $trimmedId = trim($weekId);
 
-       
-        $isoWeek = substr($weekId, 4, 2);
+        if (preg_match('/^\d{6}$/', $trimmedId) !== 1) {
+            throw new InvalidArgumentException("Invalid week ID format '{$weekId}'. Expected 6-digit 'YYYYWW' ISO string.");
+        }
 
-        
+        $isoYear = (int) substr($trimmedId, 0, 4);
+        $isoWeek = (int) substr($trimmedId, 4, 2);
+
         $startOfWeek = Carbon::now()
-            ->setISODate($isoYear, (int)$isoWeek)
+            ->setISODate($isoYear, $isoWeek)
             ->startOfWeek(Carbon::MONDAY);
 
-       
-        $endOfWeek = (clone $startOfWeek)->endOfWeek(Carbon::SUNDAY);
+        $endOfWeek = $startOfWeek->clone()->endOfWeek(Carbon::SUNDAY);
 
         return [
             'start' => $startOfWeek->toDateString(),
             'end'   => $endOfWeek->toDateString(),
         ];
     }
-
 }
-

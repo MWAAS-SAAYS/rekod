@@ -1,46 +1,62 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Imports;
+
 use App\Models\AdministrativeUnit;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\DB;
-use Maatwebsite\Excel\Concerns\ToModel;
-use Maatwebsite\Excel\Concerns\WithHeadingRow;
+use Maatwebsite\Excel\Concerns\Importable;
 use Maatwebsite\Excel\Concerns\SkipsFailures;
 use Maatwebsite\Excel\Concerns\SkipsOnFailure;
+use Maatwebsite\Excel\Concerns\ToModel;
+use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
-use Maatwebsite\Excel\Concerns\Importable;
-use Illuminate\Support\Facades\Validator;
 
-class AdministrativeUnitsImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
-
+final class AdministrativeUnitsImport implements ToModel, WithHeadingRow, SkipsOnFailure, WithValidation
 {
-use Importable, SkipsFailures;
+    use Importable;
+    use SkipsFailures;
 
+    /**
+     * Get the validation rules that apply to the import row.
+     *
+     * @return array<string, array<int, string>>
+     */
     public function rules(): array
     {
         return [
-            '*.name'        => 'required|string',
-            '*.code'        => 'required|unique:administrative_units,code',
-            '*.parent_code' => 'nullable',
-            '*.level'       => 'required',
+            'name'        => ['required', 'string', 'max:255'],
+            'code'        => ['required', 'string', 'max:100'],
+            'parent_code' => ['nullable', 'string', 'max:100'],
+            'level'       => ['required', 'integer'],
         ];
     }
 
-
-    public function model(array $row)
+    /**
+     * Map an Excel row to an AdministrativeUnit model instance.
+     *
+     * @param array<string, mixed> $row
+     */
+    public function model(array $row): ?AdministrativeUnit
     {
-        return DB::transaction(function () use ($row) {
-            return AdministrativeUnit ::updateOrCreate(
-                ['code' => strtolower($row['code'])],
-                [
-                    'name'        => $row['name'],
-                    'parent_code' => strtolower($row['parent_code']) ?? null,
-                    'level'       => $row['level'],
-                ]
-            );
-        });
+        $code = Str::lower(trim((string) ($row['code'] ?? '')));
+
+        if ($code === '') {
+            return null;
+        }
+
+        $parentCode = isset($row['parent_code']) && trim((string) $row['parent_code']) !== ''
+            ? Str::lower(trim((string) $row['parent_code']))
+            : null;
+
+        return AdministrativeUnit::updateOrCreate(
+            ['code' => $code],
+            [
+                'name'        => trim((string) ($row['name'] ?? '')),
+                'parent_code' => $parentCode,
+                'level'       => (int) ($row['level'] ?? 0),
+            ]
+        );
     }
-
-
 }

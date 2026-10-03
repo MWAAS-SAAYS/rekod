@@ -101,10 +101,10 @@
 
                         <div>
                             <label class="block text-sm font-medium">Department <span class="text-red-600">*</span></label>
-                            <select name="department" class="w-full mt-1 p-2 border rounded">
+                            <select name="department_id" class="w-full mt-1 p-2 border rounded">
                                 <option value="">-- Select Department --</option>
                                 @foreach($departments as $dept)
-                                    <option value="{{ $dept->id }}" {{ old('department') == $dept->id ? 'selected' : '' }}>
+                                    <option value="{{ $dept->id }}" {{ old('department_id') == $dept->id ? 'selected' : '' }}>
                                         {{ $dept->name }}
                                     </option>
                                 @endforeach
@@ -150,7 +150,7 @@
                             <select name="county_id" id="county" class="w-full border rounded p-2 select2">
                                 <option value="">-- Select County --</option>
                                 @foreach($counties as $county)
-                                    <option value="{{ $county->id }}" {{ old('county_id') == $county->id ? 'selected' : '' }}>
+                                    <option value="{{ $county->id }}" data-code="{{ $county->code }}" {{ old('county_id') == $county->id ? 'selected' : '' }}>
                                         {{ $county->name }}
                                     </option>
                                 @endforeach
@@ -192,60 +192,93 @@
                 <input type="password" name="password_confirmation" required class="w-full mt-1 p-2 border rounded">
             </div>
 
-            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+            <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 font-semibold">
                 Register
             </button>
         </form>
     </div>
 </div>
 
+<!-- jQuery (Required for Select2 & AJAX) -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
 <script>
-    const roleSelect = document.getElementById('role');
-    const studentFields = document.getElementById('student-fields');
-    const lecturerFields = document.getElementById('lecturer-fields');
-    const companyFields = document.getElementById('company-fields');
+    document.addEventListener("DOMContentLoaded", function () {
+        const roleSelect = document.getElementById('role');
+        const studentFields = document.getElementById('student-fields');
+        const lecturerFields = document.getElementById('lecturer-fields');
+        const companyFields = document.getElementById('company-fields');
 
-    function toggleFields() {
-        const role = roleSelect.value;
-        
-        // Hide all sections first
-        studentFields.classList.add('hidden');
-        lecturerFields.classList.add('hidden');
-        companyFields.classList.add('hidden');
-        
-        // Disable all fields in hidden sections
-        document.querySelectorAll('#student-fields input, #student-fields select, #lecturer-fields input, #lecturer-fields select, #company-fields input, #company-fields select').forEach(el => {
-            el.disabled = true;
-        });
-
-        // Show and enable the selected section
-        if (role === 'student') {
-            studentFields.classList.remove('hidden');
-            studentFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
-        } else if (role === 'lecturer') {
-            lecturerFields.classList.remove('hidden');
-            lecturerFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
-        } else if (role === 'company') {
-            companyFields.classList.remove('hidden');
-            companyFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
-        }
-    }
-
-    roleSelect.addEventListener('change', toggleFields);
-    
-    // Run on page load to handle old() values
-    window.addEventListener('load', function() {
-        toggleFields();
-        
-        // Initialize Select2 if you're using it
-        if (typeof $ !== 'undefined' && $.fn.select2) {
-            $('.select2').select2({
-                width: '100%'
+        function toggleFields() {
+            const role = roleSelect.value;
+            
+            // Hide all sections first
+            studentFields.classList.add('hidden');
+            lecturerFields.classList.add('hidden');
+            companyFields.classList.add('hidden');
+            
+            // Disable all fields in hidden sections so they are omitted from form submit
+            document.querySelectorAll('#student-fields input, #student-fields select, #lecturer-fields input, #lecturer-fields select, #company-fields input, #company-fields select').forEach(el => {
+                el.disabled = true;
             });
+
+            // Show and enable selected section
+            if (role === 'student') {
+                studentFields.classList.remove('hidden');
+                studentFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
+            } else if (role === 'lecturer') {
+                lecturerFields.classList.remove('hidden');
+                lecturerFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
+            } else if (role === 'company') {
+                companyFields.classList.remove('hidden');
+                companyFields.querySelectorAll('input, select').forEach(el => el.disabled = false);
+            }
+
+            // Sync Select2 disabled states
+            if (typeof $ !== 'undefined' && $.fn.select2) {
+                $('.select2').trigger('change.select2');
+            }
         }
+
+        roleSelect.addEventListener('change', toggleFields);
+        toggleFields(); // Initial run
+    });
+
+    // jQuery & Select2 Handlers
+    $(document).ready(function() {
+        if ($.fn.select2) {
+            $('.select2').select2({ width: '100%' });
+        }
+
+        // Dependent Dropdown: Fetch Towns when County changes
+        $('#county').on('change', function() {
+            let countyId = $(this).val();
+            let townSelect = $('#town');
+
+            townSelect.empty().append('<option value="">-- Select Town --</option>');
+
+            if (countyId) {
+                // Fetch towns via AJAX
+                $.ajax({
+                    url: '/get-towns/' + countyId,
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        $.each(data, function(key, town) {
+                            townSelect.append('<option value="' + town.id + '">' + town.name + '</option>');
+                        });
+                        townSelect.trigger('change'); // Update Select2 interface
+                    },
+                    error: function() {
+                        console.log('Town fetch route /get-towns/' + countyId + ' not found or returned error.');
+                    }
+                });
+            } else {
+                townSelect.trigger('change');
+            }
+        });
     });
 </script>
-
 
 @push('styles')
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />

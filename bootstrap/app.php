@@ -1,4 +1,6 @@
-﻿<?php
+<?php
+
+declare(strict_types=1);
 
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -10,9 +12,7 @@ return Application::configure(basePath: dirname(__DIR__))
         web: __DIR__ . '/../routes/web.php',
         commands: __DIR__ . '/../routes/console.php',
         health: '/up',
-
-        then: function () {
-
+        then: function (): void {
             Route::prefix('students')
                 ->middleware(['web', 'portal:student'])
                 ->group(base_path('routes/student.php'));
@@ -34,18 +34,14 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->group(base_path('routes/company.php'));
         }
     )
-
     ->withMiddleware(function (Middleware $middleware): void {
-
         $middleware->alias([
             'portal' => \App\Http\Middleware\PortalMiddleWare::class,
             'ensure.attachment.selected' => \App\Http\Middleware\EnsureAttachmentSelected::class,
+            'company.verified' => \App\Http\Middleware\EnsureCompanyIsVerified::class,
         ]);
-
     })
-
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })
-
     ->create();

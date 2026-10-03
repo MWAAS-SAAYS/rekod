@@ -1,136 +1,185 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
 
 use App\Imports\AttachmentLecturersImport;
-use App\Models\Attachment;
-use App\Models\Lecturer;
 use App\Models\AdministrativeUnit;
-use Illuminate\Http\Request;
+use App\Models\Attachment;
 use App\Models\AttachmentLecturer;
+use App\Models\Lecturer;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
 use Maatwebsite\Excel\Facades\Excel;
+use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
-
-class AttachmentLecturerController extends Controller
+final class AttachmentLecturerController extends Controller
 {
+    /**
+     * Level ID corresponding to Department administrative units.
+     */
+    private const DEPARTMENT_LEVEL = 2;
 
-    public function index(Request $request)
-{
-    if ($request->ajax()) {
-        $data = AttachmentLecturer::with(['attachment', 'lecturer.user', 'department']);
+    /**
+     * Display listing of attachment lecturers or return DataTables JSON.
+     */
+    public function index(Request $request): View|JsonResponse
+    {
+        if ($request->ajax()) {
+            $query = AttachmentLecturer::query()->with([
+                'attachment',
+                'lecturer.user',
+                'department',
+            ]);
 
-        if (!empty($request->attachment_id)) {
-            $data->where('attachment_id', $request->attachment_id);
+            if ($request->filled('attachment_id')) {
+                $query->where('attachment_id', $request->input('attachment_id'));
+            }
+
+            return DataTables::of($query)
+                ->addIndexColumn()
+                ->addColumn('name', static fn (AttachmentLecturer $row): string => $row->lecturer?->user?->name ?? '-')
+                ->addColumn('staff_no', static fn (AttachmentLecturer $row): string => $row->lecturer?->staff_number ?? '-')
+                ->addColumn('job_grade', static fn (AttachmentLecturer $row): string => $row->job_grade ?? '-')
+                ->addColumn('attachment', static fn (AttachmentLecturer $row): string => $row->attachment?->name ?? '-')
+                ->addColumn('department', static fn (AttachmentLecturer $row): string => $row->department?->name ?? '-')
+                ->addColumn('students', static fn (AttachmentLecturer $row): string => (string) ($row->department?->slug ?? '0'))
+                ->addColumn('action', static fn (): string => '')
+                ->rawColumns(['action'])
+                ->make(true);
         }
 
-        return DataTables::of($data)
-            ->addIndexColumn()
-            ->addColumn('name', fn ($row) => $row->lecturer->user->name ?? '-')
-            ->addColumn('staff_no', fn ($row) => $row->lecturer->staff_number ?? '-')
-             ->addColumn('job_grade', fn ($row) => $row->job_grade ?? '-')
-            ->addColumn('attachment', fn ($row) => $row->attachment->name ?? '-')
-            ->addColumn('department', fn ($row) => $row->department->name ?? '-')
-            ->addColumn('students', fn ($row) => $row->department->slug ?? 0)
-            ->addColumn('action', function ($row) {
-                return '';
-            })
-            ->rawColumns(['action'])
-            ->make(true);
+        $attachments = Attachment::query()->orderBy('start_date', 'desc')->get();
+        $lecturers = Lecturer::query()->with('user')->orderBy('staff_number')->get();
+        $departments = AdministrativeUnit::query()
+            ->where('level', self::DEPARTMENT_LEVEL)
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.attachment_lecturers', compact('attachments', 'lecturers', 'departments'));
     }
 
-   
-    $attachments = Attachment::orderBy('start_date', 'desc')->get();
-    $lecturers   = Lecturer::with('user')->orderBy('staff_number')->get();
-    $departments = AdministrativeUnit::where('level', 2)->orderBy('name')->get();
-
-    return view('admin.attachment_lecturers', compact('attachments', 'lecturers', 'departments'));
-}
-
-    public function upload(Request $request)
+    /**
+     * Upload and import attachment lecturers from Excel/CSV file.
+     */
+    public function upload(Request $request): JsonResponse
     {
         $request->validate([
-            'file' => 'required|mimes:xlsx,xls,csv|max:2048',
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:2048'],
         ]);
+
         try {
             $import = new AttachmentLecturersImport();
-            Excel::import($import, $request->file('file'));
+
+            DB::transaction(static function () use ($import, $request): void {
+                Excel::import($import, $request->file('file'));
+            });
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'File processed',
+                'message' => 'File processed successfully.',
                 'stats' => [
-                    'success_count' => $import->successCount,
-                    'fail_count' => count($import->failedRecords),
-                    'failed_records' => $import->failedRecords
-                ]
+                    'success_count' => $import->successCount ?? 0,
+                    'fail_count' => count($import->failedRecords ?? []),
+                    'failed_records' => $import->failedRecords ?? [],
+                ],
             ]);
-        } catch (\Exception $e) {
+        } catch (Throwable $e) {
+            Log::error('Error uploading lecturer attachment file: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+
             return response()->json([
                 'status' => 'error',
-                'message' => 'Error uploading file: ' . $e->getMessage(),
+                'message' => 'An error occurred while uploading and processing the file.',
             ], 500);
         }
     }
-public function store(Request $request)
-{
-    $validated = $request->validate([
-        'name'            => 'required|string|max:255',
-        'staff_no'        => 'required|string|max:255',
-        'job_grade'        => 'required|string|max:255',
-        'attachment'      => 'required|string|max:255',
-        'department'      => 'required|string|max:255',
-        'students'        => 'required|integer',
-    ]);
 
-    $record = AttachmentLecturer::create([
-        'name'            => $request->name,
-        'staff_no'        => $request->staff_no,
-        'job_grade'        => $request->job_grade,
-        'attachment'      => $request->attachment,
-        'department'      => $request->department,
-        'students'        => $request->students,
-    ]);
-
-    return response()->json([
-        'status'  => 'success',
-        'message' => 'Record stored successfully.',
-        'data'    => $record,
-    ], 201);
-}
-
-    public function add(Request $request)
+    /**
+     * Store a new attachment lecturer record manually.
+     */
+    public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'lecturer_id' => 'required|exists:lecturers,id',
-            'attachment_id' => 'required|exists:attachments,id',
-            'department_id' => 'required|exists:administrative_units,id',
+            'name' => ['required', 'string', 'max:255'],
+            'staff_no' => ['required', 'string', 'max:255'],
+            'job_grade' => ['required', 'string', 'max:255'],
+            'attachment' => ['required', 'string', 'max:255'],
+            'department' => ['required', 'string', 'max:255'],
+            'students' => ['required', 'integer', 'min:0'],
         ]);
 
-       
-        $exists = AttachmentLecturer::where('lecturer_id', $validated['lecturer_id'])
+        try {
+            $record = DB::transaction(static fn () => AttachmentLecturer::create($validated));
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Record stored successfully.',
+                'data' => $record,
+            ], 201);
+        } catch (Throwable $e) {
+            Log::error('Failed to store attachment lecturer record: ' . $e->getMessage(), [
+                'exception' => $e,
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred while saving the record.',
+            ], 500);
+        }
+    }
+
+    /**
+     * Allocate a lecturer to an attachment and department.
+     */
+    public function add(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'lecturer_id' => ['required', 'exists:lecturers,id'],
+            'attachment_id' => ['required', 'exists:attachments,id'],
+            'department_id' => ['required', 'exists:administrative_units,id'],
+        ]);
+
+        $exists = AttachmentLecturer::query()
+            ->where('lecturer_id', $validated['lecturer_id'])
             ->where('attachment_id', $validated['attachment_id'])
             ->where('department_id', $validated['department_id'])
-            ->first();
+            ->exists();
 
         if ($exists) {
-            return back()->withErrors([
-                'duplicate' => 'This record already exists in the system.',
-            ])->withInput();
+            return response()->json([
+                'status' => 'error',
+                'message' => 'This allocation record already exists in the system.',
+            ], 422);
         }
 
-        AttachmentLecturer::create([
-            'lecturer_id' => $validated['lecturer_id'],
-            'attachment_id' => $validated['attachment_id'],
-            'department_id' => $validated['department_id'],
-        ]);
+        try {
+            $record = DB::transaction(static fn () => AttachmentLecturer::create([
+                'lecturer_id' => $validated['lecturer_id'],
+                'attachment_id' => $validated['attachment_id'],
+                'department_id' => $validated['department_id'],
+            ]));
 
-        return response()->json([
+            return response()->json([
                 'status' => 'success',
-                'message' => 'File processed',
-    
-                
+                'message' => 'Lecturer allocated successfully.',
+                'data' => $record,
+            ], 201);
+        } catch (Throwable $e) {
+            Log::error('Failed to allocate lecturer: ' . $e->getMessage(), [
+                'exception' => $e,
             ]);
-}  
 
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An error occurred while creating the allocation.',
+            ], 500);
+        }
+    }
 }

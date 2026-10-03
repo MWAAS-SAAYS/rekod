@@ -1,18 +1,18 @@
+<li class="px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-amber-400/90">
+    Industry Supervision
+</li>
 
+<li>
+    <a href="{{ Route::has('industrial_supervisor.index') ? route('industrial_supervisor.index') : '#' }}" 
+       class="flex items-center px-3 py-2.5 text-xs font-semibold rounded-lg transition-all {{ request()->routeIs('industrial_supervisor.*') ? 'bg-amber-400 text-slate-950 font-bold shadow-sm' : 'text-slate-300 hover:bg-slate-800/80 hover:text-white' }}">
+        <i class="fas fa-users-gear w-5 text-center mr-2 text-sm {{ request()->routeIs('industrial_supervisor.*') ? 'text-slate-950' : 'text-amber-400/80' }}"></i>
+        <span>Assigned Trainees</span>
+    </a>
+</li>
 
-                   
-                    <li>
-                        <a href="{{ route('industrial_supervisor.attaches') }}" class="text-base text-white font-normal rounded-lg hover:bg-gray-100 hover:text-gray-900 flex items-center p-2 group ">
-                            <svg class="w-6 h-6 text-gray-500 flex-shrink-0 group-hover:text-white transition duration-75" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M8.707 7.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l2-2a1 1 0 00-1.414-1.414L11 7.586V3a1 1 0 10-2 0v4.586l-.293-.293z"></path><path d="M3 5a2 2 0 012-2h1a1 1 0 010 2H5v7h2l1 2h4l1-2h2V5h-1a1 1 0 110-2h1a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"></path></svg>
-                            <span class="ml-3 flex-1 whitespace-nowrap">Attachees</span>
-
-                        </a>
-                    </li>
-                     <li>
-                        <a href="{{ route('industrial_supervisor.weekly-reports') }}" class="text-base text-white font-normal rounded-lg hover:bg-gray-100 hover:text-gray-900 flex items-center p-2 group ">
-                            <svg class="w-6 h-6 text-gray-500 flex-shrink-0 group-hover:text-white transition duration-75" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M8.707 7.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l2-2a1 1 0 00-1.414-1.414L11 7.586V3a1 1 0 10-2 0v4.586l-.293-.293z"></path><path d="M3 5a2 2 0 012-2h1a1 1 0 010 2H5v7h2l1 2h4l1-2h2V5h-1a1 1 0 110-2h1a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5z"></path></svg>
-                            <span class="ml-3 flex-1 whitespace-nowrap">Weekly Reports</span>
-
-                        </a>
-                    </li>
-
+<li>
+    <a href="#" class="flex items-center px-3 py-2.5 text-xs font-semibold rounded-lg text-slate-300 hover:bg-slate-800/80 hover:text-white transition-all">
+        <i class="fas fa-stamp w-5 text-center mr-2 text-sm text-amber-400/80"></i>
+        <span>Logbook Approvals</span>
+    </a>
+</li>

@@ -1,69 +1,77 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
-use App\Providers\RouteServiceProvider;
+
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
-
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
-class AuthenticatedSessionController extends Controller
+final class AuthenticatedSessionController extends Controller
 {
+    /**
+     * Whitelisted portal types to prevent session parameter manipulation.
+     *
+     * @var array<int, string>
+     */
+    private const ALLOWED_PORTALS = [
+        User::ROLE_STUDENT,
+        User::ROLE_LECTURER,
+        User::ROLE_INDUSTRIAL_SUPERVISOR,
+        User::ROLE_COMPANY,
+        User::ROLE_ADMIN,
+    ];
+
     /**
      * Display the login view.
      */
-    public function create($portal = null)
-{
-    if ($portal) {
-        session(['portal' => $portal]);
-    }
-    return view('auth.login', compact('portal'));
-}
+    public function create(?string $portal = null): View
+    {
+        // Parameter Whitelisting: Guard against invalid portal parameters
+        if ($portal !== null && in_array($portal, self::ALLOWED_PORTALS, true)) {
+            session(['portal' => $portal]);
+        } else {
+            /** @var string|null $portal */
+            $portal = session('portal');
+        }
 
+        return view('auth.login', ['portal' => $portal]);
+    }
 
     /**
      * Handle an incoming authentication request.
      */
-    // app/Http/Controllers/Auth/AuthenticatedSessionController.php
+    public function store(LoginRequest $request): RedirectResponse
+    {
+        // 1. Rate-limiting & credential verification
+        $request->authenticate();
 
-public function store(Request $request)
-{
-    $credentials = $request->validate([
-        'email' => ['required', 'string', 'email'],
-        'password' => ['required', 'string'],
-    ]);
-
-    if (Auth::attempt($credentials, $request->boolean('remember'))) {
+        // 2. Session Fixation Protection: Generate fresh session token
         $request->session()->regenerate();
 
+        /** @var User|null $user */
         $user = Auth::user();
 
-        // Redirect based on user's stored portal
-        switch ($user->portal) {
-            case 'student':
-                return redirect()->route('student.portal');
-            case 'lecturer':
-                return redirect()->route('lecturer.portal');
-            case 'industrial_supervisor':
-                return redirect()->route('industry.portal');
-            case 'company':
-                return redirect()->route('company.portal');
-            case 'admin':
-                return redirect()->route('admin.portal');
-            default:
-                return redirect()->route('welcome');
-        }
+        // 3. Dynamic role-based dashboard resolution
+        $userRole = $user?->role ?? $user?->portal;
+
+        $redirectRoute = match ($userRole) {
+            User::ROLE_STUDENT => 'student.portal',
+            User::ROLE_LECTURER => 'lecturer.portal',
+            User::ROLE_INDUSTRIAL_SUPERVISOR => 'industry.portal',
+            User::ROLE_COMPANY => 'company.portal',
+            User::ROLE_ADMIN => 'admin.portal',
+            default => 'welcome',
+        };
+
+        // 4. Intended Redirection with route fallback
+        return redirect()->intended(route($redirectRoute));
     }
-
-    return back()->withErrors([
-        'email' => 'The provided credentials do not match our records.',
-    ])->onlyInput('email');
-}
-
-
 
     /**
      * Destroy an authenticated session.

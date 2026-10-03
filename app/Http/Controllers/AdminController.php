@@ -1,204 +1,277 @@
 <?php
+
+declare(strict_types=1);
+
 namespace App\Http\Controllers;
-use App\Models\Budget;
+
 use App\Models\AttachmentAssessment;
+use App\Models\Budget;
 use App\Models\FinalReport;
-use App\Models\WeeklyReport;
+use App\Models\Student;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
+use Illuminate\View\View;
 
 class AdminController extends Controller
 {
-    public function portal() {
+    /**
+     * Display admin portal dashboard.
+     */
+    public function portal(): View
+    {
+        Gate::authorize('view-admin-dashboard');
+
         return view('admin.portal');
     }
 
-    public function students() {
-        return view('students');
-    }
-
-    public function supervisors() {
-        return view('supervisors');
-    }
-
-    public function industry() {
-        return view('industry');
-    }
-
-    public function attachments() {
-        return view('attachments');
-    }
-
-     public function budgets()
+    /**
+     * Display students overview.
+     */
+    public function students(): View
     {
-        $budgets = Budget::all();
+        Gate::authorize('manage-students');
+
+        return view('admin.students');
+    }
+
+    /**
+     * Display supervisors overview.
+     */
+    public function supervisors(): View
+    {
+        Gate::authorize('manage-supervisors');
+
+        return view('admin.supervisors');
+    }
+
+    /**
+     * Display industry overview.
+     */
+    public function industry(): View
+    {
+        Gate::authorize('manage-industry');
+
+        return view('admin.industry');
+    }
+
+    /**
+     * Display attachments overview.
+     */
+    public function attachments(): View
+    {
+        Gate::authorize('manage-attachments');
+
+        return view('admin.attachments');
+    }
+
+    /**
+     * Display budget management page.
+     */
+    public function budgets(): View
+    {
+        Gate::authorize('manage-budgets');
+
+        $budgets = Budget::latest()->get();
+
         return view('admin.budgets', compact('budgets'));
     }
 
-    public function storeBudget(Request $request)
+    /**
+     * Store a new budget entry.
+     */
+    public function storeBudget(Request $request): RedirectResponse
     {
-        $request->validate([
-            'staffnumber' => 'required|string|max:255',
-            'grade' => 'required|string|max:255',
-            'lecturer_name' => 'required|string|max:255',
-            'daily_allowance' => 'required|numeric|min:0',
-            'transport_town' => 'required|numeric|min:0',
-            'totals' => 'required|numeric|min:0',
-            'student_list_file' => 'nullable|file|mimes:csv,txt|max:2048',
+        Gate::authorize('manage-budgets');
+
+        $validated = $request->validate([
+            'staffnumber' => ['required', 'string', 'max:255'],
+            'grade' => ['required', 'string', 'max:255'],
+            'lecturer_name' => ['required', 'string', 'max:255'],
+            'daily_allowance' => ['required', 'numeric', 'min:0'],
+            'transport_town' => ['required', 'numeric', 'min:0'],
+            'totals' => ['required', 'numeric', 'min:0'],
+            'student_list_file' => ['nullable', 'file', 'mimes:csv,txt', 'max:2048'],
         ]);
 
-        $budget = new Budget();
-        $budget->staffnumber = $request->staffnumber;
-        $budget->grade = $request->grade;
-        $budget->lecturer_name = $request->lecturer_name;
-        $budget->daily_allowance = $request->daily_allowance;
-        $budget->transport_town = $request->transport_town;
-        $budget->totals = $request->totals;
+        try {
+            $budget = new Budget();
+            $budget->staffnumber = trim($validated['staffnumber']);
+            $budget->grade = trim($validated['grade']);
+            $budget->lecturer_name = trim($validated['lecturer_name']);
+            $budget->daily_allowance = $validated['daily_allowance'];
+            $budget->transport_town = $validated['transport_town'];
+            $budget->totals = $validated['totals'];
 
-       
-        if ($request->hasFile('student_list_file')) {
-            $fileName = time() . '_' . $request->student_list_file->getClientOriginalName();
-            $request->student_list_file->move(public_path('uploads/student_lists'), $fileName);
-            $budget->student_list_file = $fileName;
+            if ($request->hasFile('student_list_file')) {
+                $file = $request->file('student_list_file');
+                $fileName = time() . '_' . preg_replace('/[^a-zA-Z0-9._-]/', '', $file->getClientOriginalName());
+                $file->move(public_path('uploads/student_lists'), $fileName);
+                $budget->student_list_file = $fileName;
+            }
+
+            $budget->save();
+
+            return redirect()->route('admin.budgets')->with('success', 'Budget saved successfully!');
+        } catch (\Throwable $e) {
+            Log::error('Failed to store budget: ' . $e->getMessage());
+
+            return redirect()->back()->with('error', 'An error occurred while saving the budget. Please try again.');
         }
-
-        $budget->save();
-
-        return redirect()->route('admin.budgets')->with('success', 'Budget saved successfully!');
     }
 
-    public function showBudget($id)
+    /**
+     * Display specific budget details.
+     */
+    public function showBudget(int $id): View
     {
+        Gate::authorize('manage-budgets');
+
         $budget = Budget::findOrFail($id);
+
         return view('admin.show-budget', compact('budget'));
     }
-public function destroyBudget($id)
-{
-   
 
-    $budget = \App\Models\Budget::find($id);
+    /**
+     * Delete a budget record.
+     */
+    public function destroyBudget(int $id): RedirectResponse
+    {
+        Gate::authorize('manage-budgets');
 
-    if (!$budget) {
-        return redirect()->route('admin.budgets')
-                         ->with('error', 'Budget not found.');
+        $budget = Budget::find($id);
+
+        if (!$budget) {
+            return redirect()->route('admin.budgets')->with('error', 'Budget not found.');
+        }
+
+        $budget->delete();
+
+        return redirect()->route('admin.budgets')->with('success', 'Budget deleted successfully.');
     }
 
-    $budget->delete();
+    /**
+     * Display reports overview.
+     */
+    public function reports(): View
+    {
+        Gate::authorize('view-admin-reports');
 
-    return redirect()->route('admin.budgets')
-                     ->with('success', 'Budget deleted successfully.');
-}
-
-
-    public function reports() {
         return view('admin.reports');
     }
 
-    public function settings() {
+    /**
+     * Display administrative settings.
+     */
+    public function settings(): View
+    {
+        Gate::authorize('manage-admin-settings');
+
         return view('admin.settings');
     }
-    public function index()
-{
-    $assessments = AttachmentAssessment::with([
-        'attachmentStudent.student.user',
-        'attachmentStudent.student.program',
-        'lecturer.user',
-        'industrialSupervisor.user'
-    ])->get();
 
-    $totals = [
-        'lecturer_total' => $assessments->sum(fn($a) => $a->lecturer_total_marks ?? 0),
-        'industrial_total' => $assessments->sum(fn($a) => $a->industrial_supervisor_total_marks ?? 0),
-        'combined_total' => $assessments->sum(fn($a) => ($a->lecturer_total_marks ?? 0) + ($a->industrial_supervisor_total_marks ?? 0)),
-    ];
+    /**
+     * Display attachment assessments summary and totals.
+     */
+    public function index(): View
+    {
+        Gate::authorize('view-admin-assessments');
 
-    return view('admin.assessments', compact('assessments', 'totals'));
-}
-public function allFinalReports()
-{
-    
-    $reports = \App\Models\FinalReport::whereHas('attachmentStudent.student.user')
-                ->with(['attachmentStudent.student.user'])
-                ->latest()
-                ->get();
+        $assessments = AttachmentAssessment::with([
+            'attachmentStudent.student.user',
+            'attachmentStudent.student.program',
+            'lecturer.user',
+            'industrialSupervisor.user',
+        ])->get();
 
-    return view('admin.final_index', compact('reports'));
-}public function allLogbooks()
-{
-    // Get all students who have at least one daily report directly through attachment_students
-    $students = \App\Models\Student::whereHas('attachments.dailyReports') // Changed from weeklyReports.dailyReports
-        ->with([
-            'user',
-            'program.parent',
-            'attachments' => function($query) {
-                $query->with([
-                    'company',
-                    'company.town',
-                    'dailyReports' => function($q) { // Direct relationship with dailyReports
-                        $q->orderBy('report_date', 'desc');
+        $totals = [
+            'lecturer_total' => $assessments->sum(fn ($a) => $a->lecturer_total_marks ?? 0),
+            'industrial_total' => $assessments->sum(fn ($a) => $a->industrial_supervisor_total_marks ?? 0),
+            'combined_total' => $assessments->sum(
+                fn ($a) => ($a->lecturer_total_marks ?? 0) + ($a->industrial_supervisor_total_marks ?? 0)
+            ),
+        ];
+
+        return view('admin.assessments', compact('assessments', 'totals'));
+    }
+
+    /**
+     * Display all student final reports.
+     */
+    public function allFinalReports(): View
+    {
+        Gate::authorize('view-admin-reports');
+
+        $reports = FinalReport::whereHas('attachmentStudent.student.user')
+            ->with(['attachmentStudent.student.user'])
+            ->latest()
+            ->get();
+
+        return view('admin.final_index', compact('reports'));
+    }
+
+    /**
+     * Display all student logbooks and entry stats.
+     */
+    public function allLogbooks(): View
+    {
+        Gate::authorize('view-admin-reports');
+
+        $students = Student::whereHas('attachments.dailyReports')
+            ->with([
+                'user',
+                'program.parent',
+                'attachments' => function ($query) {
+                    $query->with([
+                        'company.town',
+                        'dailyReports' => fn ($q) => $q->orderBy('report_date', 'desc'),
+                    ]);
+                },
+            ])
+            ->get()
+            ->map(function ($student) {
+                $companies = [];
+                $attachmentInfo = null;
+                $allDailyReports = collect();
+
+                foreach ($student->attachments as $attachment) {
+                    if ($attachment->company) {
+                        $companies[] = [
+                            'name' => $attachment->company->name,
+                            'town' => $attachment->company->town->name ?? 'N/A',
+                        ];
                     }
-                ]);
-            }
-        ])
-        ->get()
-        ->map(function($student) {
-            // Count total logbook entries
-            $totalEntries = 0;
-            $latestEntry = null;
-            $companies = [];
-            $attachmentInfo = null;
-            $allDailyReports = collect(); // Collect all daily reports
-            
-            foreach ($student->attachments as $attachment) {
-                if ($attachment->company) {
-                    $companies[] = [
-                        'name' => $attachment->company->name,
-                        'town' => $attachment->company->town->name ?? 'N/A'
-                    ];
-                    $attachmentInfo = $attachment;
-                }
-                
-                // Get daily reports directly from attachment
-                $dailyReports = $attachment->dailyReports;
-                $totalEntries += $dailyReports->count();
-                
-                // Add to collection for latest entry check
-                $allDailyReports = $allDailyReports->merge($dailyReports);
-                
-                // Track attachment info
-                if (!$attachmentInfo) {
-                    $attachmentInfo = $attachment;
-                }
-            }
-            
-            // Find the latest entry date
-            if ($allDailyReports->isNotEmpty()) {
-                $latestReport = $allDailyReports->sortByDesc('report_date')->first();
-                $latestEntry = $latestReport->report_date;
-            }
-            
-            return [
-                'id' => $student->id,
-                'name' => $student->user->name ?? 'Unknown',
-                'reg_no' => $student->reg_no,
-                'department' => $student->program->parent->name ?? 'N/A',
-                'email' => $student->user->email ?? 'N/A',
-                'phone' => $student->user->phone_number ?? 'N/A',
-                'companies' => $companies,
-                'company_names' => implode(', ', array_column($companies, 'name')),
-                'company_towns' => implode(', ', array_column($companies, 'town')),
-                'total_entries' => $totalEntries,
-                'latest_entry' => $latestEntry,
-                'latest_entry_formatted' => $latestEntry ? $latestEntry->format('Y-m-d') : null,
-                'has_logbook' => $totalEntries > 0,
-                'attachment_id' => $attachmentInfo->id ?? null
-            ];
-        })
-        ->filter(function($student) {
-            return $student['has_logbook'];
-        })
-        ->sortByDesc('latest_entry')
-        ->values();
 
-    return view('admin.logbooks_index', compact('students'));
-}
+                    $attachmentInfo ??= $attachment;
+                    $allDailyReports = $allDailyReports->merge($attachment->dailyReports);
+                }
+
+                $totalEntries = $allDailyReports->count();
+                $latestReport = $allDailyReports->sortByDesc('report_date')->first();
+                $latestEntry = $latestReport?->report_date;
+
+                return [
+                    'id' => $student->id,
+                    'name' => $student->user?->name ?? 'Unknown',
+                    'reg_no' => $student->reg_no,
+                    'department' => $student->program?->parent?->name ?? 'N/A',
+                    'email' => $student->user?->email ?? 'N/A',
+                    'phone' => $student->user?->phone_number ?? 'N/A',
+                    'companies' => $companies,
+                    'company_names' => implode(', ', array_column($companies, 'name')),
+                    'company_towns' => implode(', ', array_column($companies, 'town')),
+                    'total_entries' => $totalEntries,
+                    'latest_entry' => $latestEntry,
+                    'latest_entry_formatted' => $latestEntry ? $latestEntry->format('Y-m-d') : null,
+                    'has_logbook' => $totalEntries > 0,
+                    'attachment_id' => $attachmentInfo?->id,
+                ];
+            })
+            ->filter(fn ($student) => $student['has_logbook'])
+            ->sortByDesc('latest_entry')
+            ->values();
+
+        return view('admin.logbooks_index', compact('students'));
+    }
 }

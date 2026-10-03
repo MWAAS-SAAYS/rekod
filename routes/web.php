@@ -4,6 +4,7 @@ use App\Http\Controllers\AttachmentDetailsController;
 use App\Http\Controllers\AttachmentSelectedController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\CompanyController;
+use App\Http\Controllers\Company\InnovationInterestController;
 use App\Http\Controllers\DailyReportController;
 use App\Http\Controllers\IndustrialSupervisorController;
 use App\Http\Controllers\OpportunityController;
@@ -20,7 +21,6 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 Route::get('/cookie-test', function (Request $request) {
-
     session(['hello' => 'world']);
 
     cookie()->queue(cookie(
@@ -59,6 +59,15 @@ Route::get('/', function () {
 
 /*
 |--------------------------------------------------------------------------
+| Public Location / Registration Helpers
+|--------------------------------------------------------------------------
+*/
+
+Route::get('/get-towns/{countyId}', [RegisteredUserController::class, 'getTowns'])
+    ->name('get.towns');
+
+/*
+|--------------------------------------------------------------------------
 | Authentication Routes
 |--------------------------------------------------------------------------
 */
@@ -79,6 +88,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    /*
+    | Corporate Identity Verification Notice
+    */
+    Route::view('/company/verification-pending', 'company.verification-pending')
+        ->name('company.verification-pending');
 
     /*
     | Companies
@@ -153,11 +168,26 @@ Route::middleware(['portal:admin'])
 
 /*
 |--------------------------------------------------------------------------
+| Company / Industry Portal
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'portal:industry', 'verified.company'])
+    ->prefix('company')
+    ->name('company.')
+    ->group(function () {
+
+        Route::post('/innovations/{innovation}/interest', [InnovationInterestController::class, 'store'])
+            ->name('innovations.interest');
+    });
+
+/*
+|--------------------------------------------------------------------------
 | Lecturer
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth')
+Route::middleware(['auth', 'portal:lecturer'])
     ->prefix('lecturer')
     ->name('lecturer.')
     ->group(function () {
@@ -172,7 +202,7 @@ Route::middleware('auth')
 |--------------------------------------------------------------------------
 */
 
-Route::middleware('auth')
+Route::middleware(['auth', 'portal:industrial_supervisor'])
     ->prefix('industrial-supervisor')
     ->name('industrial_supervisor.')
     ->group(function () {
