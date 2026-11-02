@@ -18,7 +18,8 @@ return new class extends Migration
         
         // This migration ensures the role column can accommodate new values
         // No schema change needed for string column, but we add a comment for documentation
-        DB::statement("ALTER TABLE users COMMENT = 'Roles: student, industry, university, admin, hod, cod, directorate, deku_to_cs, security, alumni'");
+        // PostgreSQL uses: COMMENT ON TABLE table_name IS 'comment'
+        DB::statement("COMMENT ON TABLE users IS 'Roles: student, industry, university, admin, hod, cod, directorate, deku_to_cs, security, alumni'");
     }
 
     /**
@@ -26,6 +27,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("ALTER TABLE users COMMENT = ''");
+        DB::statement("COMMENT ON TABLE users IS ''");
     }
 };

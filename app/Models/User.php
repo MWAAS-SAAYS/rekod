@@ -35,6 +35,14 @@ final class User extends Authenticatable
         'password',
         'role',
         'phone_number',
+        'national_id_hash',
+        'kdpa_consent',
+        'avatar_url',
+        'insurance_provider',
+        'insurance_policy_no',
+        'insurance_expiry',
+        'insurance_verified',
+        'offline_logbook_sync_token',
     ];
 
     /**
@@ -45,6 +53,10 @@ final class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'national_id_hash',
+        'kdpa_consent',
+        'insurance_policy_no',
+        'offline_logbook_sync_token',
     ];
 
     /**
@@ -57,6 +69,9 @@ final class User extends Authenticatable
         'password'          => 'hashed',
         'created_at'        => 'datetime',
         'updated_at'        => 'datetime',
+        'kdpa_consent'      => 'array',
+        'insurance_expiry'  => 'date',
+        'insurance_verified' => 'boolean',
     ];
 
     /**
