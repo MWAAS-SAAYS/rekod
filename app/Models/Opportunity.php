@@ -34,10 +34,16 @@ final class Opportunity extends Model
         'description',
         'link',
         'location',
+        'location_type',
         'expiry_date',
         'program_code',
         'is_paid',
-        'slots_count',
+        'stipend_min',
+        'stipend_max',
+        'duration_months',
+        'slots_total',
+        'slots_filled',
+        'field_tags',
     ];
 
     /**
@@ -46,12 +52,19 @@ final class Opportunity extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'company_id'  => 'integer',
-        'expiry_date' => 'date',
-        'is_paid'     => 'boolean',
-        'slots_count' => 'integer',
-        'created_at'  => 'datetime',
-        'updated_at'  => 'datetime',
+        'company_id'    => 'integer',
+        'expiry_date'   => 'date',
+        'is_paid'       => 'boolean',
+        'stipend_min'   => 'decimal:2',
+        'stipend_max'   => 'decimal:2',
+        'duration_months' => 'integer',
+        'slots_total'   => 'integer',
+        'slots_filled'  => 'integer',
+        'slots_count'   => 'integer',
+        'field_tags'    => 'array',
+        'location_type' => 'string',
+        'created_at'    => 'datetime',
+        'updated_at'    => 'datetime',
     ];
 
     /**
@@ -120,10 +133,105 @@ final class Opportunity extends Model
     }
 
     /**
+     * Scope a query to filter opportunities by location type.
+     *
+     * @param Builder<Opportunity> $query
+     * @return Builder<Opportunity>
+     */
+    public function scopeByLocationType(Builder $query, string $type): Builder
+    {
+        return $query->where('location_type', $type);
+    }
+
+    /**
+     * Scope a query to filter opportunities with stipend range.
+     *
+     * @param Builder<Opportunity> $query
+     * @return Builder<Opportunity>
+     */
+    public function scopeWithStipendRange(Builder $query, float $min = 0, float $max = PHP_FLOAT_MAX): Builder
+    {
+        return $query->where(function (Builder $q) use ($min, $max) {
+            $q->where('stipend_min', '>=', $min)
+                ->orWhere('stipend_max', '<=', $max);
+        });
+    }
+
+    /**
+     * Scope a query to filter opportunities by field tags.
+     *
+     * @param Builder<Opportunity> $query
+     * @return Builder<Opportunity>
+     */
+    public function scopeWithFieldTags(Builder $query, array $tags): Builder
+    {
+        return $query->whereJsonContains('field_tags', $tags);
+    }
+
+    /**
+     * Scope a query to filter opportunities with available slots.
+     *
+     * @param Builder<Opportunity> $query
+     * @return Builder<Opportunity>
+     */
+    public function scopeWithAvailableSlots(Builder $query): Builder
+    {
+        return $query->whereRaw('slots_filled < slots_total');
+    }
+
+    /**
      * Check if the opportunity deadline has passed.
      */
     public function getIsExpiredAttribute(): bool
     {
         return $this->expiry_date ? $this->expiry_date->isPast() : false;
+    }
+
+    /**
+     * Get the number of available slots.
+     */
+    public function getAvailableSlotsAttribute(): int
+    {
+        return max(0, ($this->slots_total ?? $this->slots_count ?? 0) - ($this->slots_filled ?? 0));
+    }
+
+    /**
+     * Check if the opportunity has available slots.
+     */
+    public function getHasAvailableSlotsAttribute(): bool
+    {
+        return $this->available_slots > 0;
+    }
+
+    /**
+     * Get the stipend range as a formatted string.
+     */
+    public function getStipendRangeAttribute(): ?string
+    {
+        if (!$this->stipend_min && !$this->stipend_max) {
+            return null;
+        }
+        if ($this->stipend_min && $this->stipend_max && $this->stipend_min == $this->stipend_max) {
+            return 'KES ' . number_format($this->stipend_min, 2);
+        }
+        $min = $this->stipend_min ? 'KES ' . number_format($this->stipend_min, 2) : 'Negotiable';
+        $max = $this->stipend_max ? 'KES ' . number_format($this->stipend_max, 2) : 'Negotiable';
+        return "{$min} - {$max}";
+    }
+
+    /**
+     * Increment the filled slots count.
+     */
+    public function incrementFilledSlots(): void
+    {
+        $this->increment('slots_filled');
+    }
+
+    /**
+     * Decrement the filled slots count.
+     */
+    public function decrementFilledSlots(): void
+    {
+        $this->decrement('slots_filled');
     }
 }

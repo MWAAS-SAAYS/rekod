@@ -32,6 +32,10 @@ final class Student extends Model
         'program_id',
         'supervisor_id',
         'reg_no',
+        'attachment_status',
+        'current_company_id',
+        'attachment_start_date',
+        'attachment_end_date',
     ];
 
     /**
@@ -40,11 +44,15 @@ final class Student extends Model
      * @var array<string, string>
      */
     protected $casts = [
-        'user_id'       => 'integer',
-        'program_id'    => 'integer',
-        'supervisor_id' => 'integer',
-        'created_at'    => 'datetime',
-        'updated_at'    => 'datetime',
+        'user_id'                 => 'integer',
+        'program_id'              => 'integer',
+        'supervisor_id'           => 'integer',
+        'current_company_id'      => 'integer',
+        'attachment_status'       => 'string',
+        'attachment_start_date'   => 'date',
+        'attachment_end_date'     => 'date',
+        'created_at'              => 'datetime',
+        'updated_at'              => 'datetime',
     ];
 
     /**
@@ -108,6 +116,16 @@ final class Student extends Model
     }
 
     /**
+     * Get the current company where the student is attached.
+     *
+     * @return BelongsTo<Company, $this>
+     */
+    public function currentCompany(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'current_company_id');
+    }
+
+    /**
      * Scope a query to filter students by user account ID.
      *
      * @param Builder<Student> $query
@@ -138,5 +156,57 @@ final class Student extends Model
     public function scopeRegistrationNumber(Builder $query, string $regNo): Builder
     {
         return $query->where('reg_no', $regNo);
+    }
+
+    /**
+     * Scope a query to filter students by attachment status.
+     *
+     * @param Builder<Student> $query
+     * @return Builder<Student>
+     */
+    public function scopeByAttachmentStatus(Builder $query, string $status): Builder
+    {
+        return $query->where('attachment_status', $status);
+    }
+
+    /**
+     * Scope a query to filter students by current company ID.
+     *
+     * @param Builder<Student> $query
+     * @return Builder<Student>
+     */
+    public function scopeForCompany(Builder $query, int $companyId): Builder
+    {
+        return $query->where('current_company_id', $companyId);
+    }
+
+    /**
+     * Scope a query to filter students currently on attachment.
+     *
+     * @param Builder<Student> $query
+     * @return Builder<Student>
+     */
+    public function scopeCurrentlyAttached(Builder $query): Builder
+    {
+        return $query->where('attachment_status', 'attached')
+            ->whereNotNull('attachment_start_date')
+            ->where(function (Builder $q) {
+                $q->whereNull('attachment_end_date')
+                    ->orWhere('attachment_end_date', '>=', now());
+            });
+    }
+
+    /**
+     * Check if the student is currently on attachment.
+     */
+    public function isCurrentlyAttached(): bool
+    {
+        if ($this->attachment_status !== 'attached' || !$this->attachment_start_date) {
+            return false;
+        }
+        if ($this->attachment_end_date && $this->attachment_end_date->isPast()) {
+            return false;
+        }
+        return true;
     }
 }
